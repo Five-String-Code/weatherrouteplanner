@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- OBSOLETE — not used, see AppShell.xaml.cs. Safe to delete both files. -->
+<Shell xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+       xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+       xmlns:views="clr-namespace:RouteWeatherPlanner.Views"
+       x:Class="RouteWeatherPlanner.AppShell"
+       Title="Route Weather Planner">
+
+    <ShellContent Title="Plan Route"
+                  ContentTemplate="{DataTemplate views:RoutePlanningPage}"
+                  Route="RoutePlanningPage" />
+
+    <ShellContent Title="Forecast"
+                  ContentTemplate="{DataTemplate views:ForecastListPage}"
+                  Route="ForecastListPage" />
+
+</Shell>

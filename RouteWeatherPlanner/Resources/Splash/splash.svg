@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 456 456">
+  <!-- Same sun/cloud + road mark as appiconfg.svg (kept a separate file
+       since MAUI compiles splash and app-icon resources independently),
+       swapped in for the old plain map-pin so the splash screen matches
+       the app icon instead of looking like an unrelated leftover from the
+       MAUI project template. -->
+  <circle cx="304" cy="146" r="54" fill="#FFC94A" />
+  <circle cx="168" cy="182" r="50" fill="#FFFFFF" />
+  <circle cx="232" cy="160" r="60" fill="#FFFFFF" />
+  <circle cx="288" cy="188" r="42" fill="#FFFFFF" />
+  <ellipse cx="222" cy="208" rx="118" ry="48" fill="#FFFFFF" />
+  <path d="M 46 372 C 120 330, 150 292, 228 292 C 306 292, 336 330, 410 372"
+        fill="none" stroke="#33414D" stroke-width="46" stroke-linecap="round" />
+  <path d="M 46 372 C 120 330, 150 292, 228 292 C 306 292, 336 330, 410 372"
+        fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round"
+        stroke-dasharray="20 22" />
+</svg>

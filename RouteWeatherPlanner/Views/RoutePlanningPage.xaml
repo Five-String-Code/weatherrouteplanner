@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:RouteWeatherPlanner.ViewModels"
+             xmlns:services="clr-namespace:RouteWeatherPlanner.Services"
+             xmlns:converters="clr-namespace:RouteWeatherPlanner.Converters"
+             xmlns:config="clr-namespace:RouteWeatherPlanner.Configuration"
+             xmlns:admob="clr-namespace:Plugin.AdMob;assembly=Plugin.AdMob"
+             x:Class="RouteWeatherPlanner.Views.RoutePlanningPage"
+             x:DataType="vm:RoutePlannerViewModel"
+             x:Name="RootPage"
+             Title="Plan Route">
+
+    <ContentPage.Resources>
+        <converters:InvertedBoolConverter x:Key="InvertedBoolConverter" />
+        <converters:StringNotEmptyConverter x:Key="NotEmptyConverter" />
+    </ContentPage.Resources>
+
+    <Grid RowDefinitions="*,Auto">
+    <!-- Row 0 (*) holds the page content; Row 1 (Auto) is the AdMob banner anchored
+         at the very bottom, below everything else, rather than overlaying it on top
+         of the map. The busy overlay Grid at the bottom of this file spans both rows
+         via Grid.RowSpan so it still dims the whole screen, ad included, while Plan
+         Route is running. -->
+
+    <Grid Grid.Row="0" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*" Padding="16" RowSpacing="6">
+
+        <!-- ── Origin: type a full address / city / zip, then Search or Enter ──── -->
+        <VerticalStackLayout Grid.Row="0" Spacing="2">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                <!-- Entry + "my location" icon share this cell so the icon sits
+                     inside the field on its right edge instead of taking a
+                     separate column. Entry's own right margin keeps typed text
+                     from running underneath the icon/spinner. -->
+                <Grid Grid.Column="0">
+                    <Entry x:Name="OriginEntry"
+                           Placeholder="Origin — address, city, or zip"
+                           Text="{Binding OriginSearchText}"
+                           ReturnType="Search"
+                           ReturnCommand="{Binding SearchOriginCommand}"
+                           ClearButtonVisibility="WhileEditing"
+                           Margin="0,0,40,0" />
+                    <Button Text="📍"
+                            ToolTipProperties.Text="Use my location"
+                            Command="{Binding UseMyLocationCommand}"
+                            IsVisible="{Binding IsLocatingOrigin, Converter={StaticResource InvertedBoolConverter}}"
+                            HorizontalOptions="End" VerticalOptions="Center"
+                            WidthRequest="36" HeightRequest="36" Padding="0"
+                            BackgroundColor="Transparent" BorderWidth="0"
+                            TextColor="#512BD4" FontSize="18" />
+                    <ActivityIndicator IsRunning="{Binding IsLocatingOrigin}"
+                                       IsVisible="{Binding IsLocatingOrigin}"
+                                       Color="#512BD4"
+                                       HorizontalOptions="End" VerticalOptions="Center"
+                                       WidthRequest="24" HeightRequest="24"
+                                       Margin="0,0,8,0" />
+                </Grid>
+                <Button Grid.Column="1"
+                        Text="Search"
+                        Command="{Binding SearchOriginCommand}"
+                        TextColor="White" />
+            </Grid>
+            <CollectionView IsVisible="{Binding HasOriginSearchResults}"
+                             ItemsSource="{Binding OriginSearchResults}"
+                             SelectionMode="Single"
+                             SelectedItem="{Binding SelectedOriginResult}"
+                             MaximumHeightRequest="200">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="services:GeocodeResult">
+                        <Label Text="{Binding DisplayName}"
+                               Padding="10,8" FontSize="13"
+                               LineBreakMode="TailTruncation" />
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </VerticalStackLayout>
+
+        <!-- ── Destination: same pattern, independent search state ───────────── -->
+        <VerticalStackLayout Grid.Row="1" Spacing="2">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                <Entry x:Name="DestinationEntry"
+                       Grid.Column="0"
+                       Placeholder="Destination — address, city, or zip"
+                       Text="{Binding DestinationSearchText}"
+                       ReturnType="Search"
+                       ReturnCommand="{Binding SearchDestinationCommand}"
+                       ClearButtonVisibility="WhileEditing" />
+                <Button Grid.Column="1"
+                        Text="Search"
+                        Command="{Binding SearchDestinationCommand}"
+                        TextColor="White" />
+            </Grid>
+            <CollectionView IsVisible="{Binding HasDestinationSearchResults}"
+                             ItemsSource="{Binding DestinationSearchResults}"
+                             SelectionMode="Single"
+                             SelectedItem="{Binding SelectedDestinationResult}"
+                             MaximumHeightRequest="200">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="services:GeocodeResult">
+                        <Label Text="{Binding DisplayName}"
+                               Padding="10,8" FontSize="13"
+                               LineBreakMode="TailTruncation" />
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </VerticalStackLayout>
+
+        <DatePicker Grid.Row="2" Date="{Binding DepartureTime}" />
+
+        <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="6">
+            <Button Grid.Column="0"
+                    Text="Plan Route"
+                    Command="{Binding PlanRouteCommand}"
+                    IsEnabled="{Binding IsBusy, Converter={StaticResource InvertedBoolConverter}}"
+                    TextColor="White" />
+            <Button Grid.Column="1"
+                    Text="Clear All"
+                    Command="{Binding ClearAllCommand}"
+                    IsEnabled="{Binding IsBusy, Converter={StaticResource InvertedBoolConverter}}"
+                    BackgroundColor="#666666"
+                    TextColor="White" />
+        </Grid>
+
+        <Label Grid.Row="4"
+               Text="{Binding ErrorMessage}"
+               TextColor="Red"
+               IsVisible="{Binding ErrorMessage, Converter={StaticResource NotEmptyConverter}}" />
+
+        <!--
+            Leaflet + OpenStreetMap in a WebView, same as proximityalarm's map.html —
+            no API key, no Google Maps dependency. See map.html (Resources/Raw) for the
+            setRoute/setWaypoints/setRadarFrames JS functions this page drives. Radar
+            starts animating on its own once a route is planned; the map stays put so
+            you can watch it — "View Forecast" below is the explicit way to move on
+            to the waypoint list instead of navigating there automatically.
+        -->
+        <Grid Grid.Row="5">
+            <WebView x:Name="MapWebView" />
+
+            <Button Text="View Forecast Along Route"
+                    Command="{Binding ViewForecastCommand}"
+                    IsVisible="{Binding HasCurrentTrip}"
+                    VerticalOptions="End" HorizontalOptions="Fill"
+                    Margin="0,0,0,16"
+                    BackgroundColor="#512BD4" TextColor="White"
+                    CornerRadius="24" HeightRequest="48" FontAttributes="Bold" />
+        </Grid>
+
+    </Grid>
+
+    <!-- Google AdMob banner via Plugin.AdMob's own BannerAd control — see README.md
+         item 14. AdUnitId is set declaratively here via x:Static rather than in
+         code-behind (the old AppLovin scaffold needed code-behind because its
+         BannerAdView had no built-in way to take the ID from XAML directly). While
+         Configuration/AdMobConfig.cs still has the placeholder value,
+         MauiProgram.cs's AdConfig.UseTestAdUnitIds = true override means this
+         AdUnitId is ignored in favor of Google's test ad units — see that file's
+         comment. AdSize defaults to "Banner" (320x50), matching the HeightRequest
+         below. -->
+    <admob:BannerAd Grid.Row="1"
+                     AdUnitId="{x:Static config:AdMobConfig.BannerAdUnitId}"
+                     HeightRequest="50" HorizontalOptions="Fill" />
+
+    <!-- Busy overlay — Plan Route now includes a route call plus a reverse-geocode
+         lookup per waypoint paced ~1.1s apart for Nominatim's rate limit (see
+         WaypointScheduler), so a multi-waypoint trip can take several seconds. This
+         gives a visible "it's working" cue instead of a dead-looking disabled button.
+         RowSpan="2" so it dims the banner row too, not just the page content above it. -->
+    <Grid Grid.RowSpan="2"
+          IsVisible="{Binding IsBusy}"
+          BackgroundColor="#99000000"
+          InputTransparent="False">
+        <VerticalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Spacing="14">
+            <ActivityIndicator IsRunning="{Binding IsBusy}"
+                                Color="White"
+                                WidthRequest="56" HeightRequest="56" />
+            <Label Text="Planning route…"
+                   TextColor="White" FontAttributes="Bold" FontSize="15" />
+        </VerticalStackLayout>
+    </Grid>
+
+    </Grid>
+</ContentPage>

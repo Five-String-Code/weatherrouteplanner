@@ -1,0 +1,14 @@
+bin/
+obj/
+*.user
+.vs/
+.vscode/
+**/Configuration/ApiKeys.cs
+**/Configuration/AdMobConfig.cs
+*.keystore
+*.jks
+*.zip
+*.aab
+*.apk
+.idea/
+Thumbs.db

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:RouteWeatherPlanner.ViewModels"
+             xmlns:models="clr-namespace:RouteWeatherPlanner.Models"
+             x:Class="RouteWeatherPlanner.Views.ForecastListPage"
+             x:DataType="vm:WaypointForecastViewModel"
+             Title="Forecast Along Route">
+
+    <RefreshView IsRefreshing="{Binding IsBusy}"
+                 Command="{Binding RefreshForecastsCommand}">
+        <CollectionView ItemsSource="{Binding Waypoints}">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="models:RouteWaypoint">
+                    <Grid Padding="16,12" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+
+                        <Label Grid.Row="0" Grid.Column="0"
+                               Text="{Binding PlaceName, TargetNullValue='Unnamed point'}"
+                               FontAttributes="Bold" />
+
+                        <Label Grid.Row="0" Grid.Column="1"
+                               Text="{Binding EstimatedArrival, StringFormat='ETA {0:t}'}" />
+
+                        <Label Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                               Text="{Binding Forecast.Condition, TargetNullValue='Forecast pending…'}"
+                               TextColor="Gray" />
+
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </RefreshView>
+
+</ContentPage>

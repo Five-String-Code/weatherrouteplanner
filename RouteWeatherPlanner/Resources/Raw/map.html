@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        html, body, #map { width:100%; height:100%; }
+        .leaflet-control-zoom {
+            border: none !important; border-radius: 14px !important;
+            overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.25) !important;
+        }
+        .leaflet-control-zoom a {
+            background: rgba(255,255,255,0.95) !important; color: #333 !important;
+            width: 40px !important; height: 40px !important; line-height: 40px !important;
+            font-size: 20px !important; font-weight: 300 !important;
+            border: none !important; border-bottom: 1px solid rgba(0,0,0,0.08) !important;
+        }
+        .leaflet-control-zoom-out { border-bottom: none !important; }
+        .leaflet-control-zoom a:hover { background: #f0eeff !important; color: #512BD4 !important; }
+        .leaflet-control-attribution {
+            background: rgba(255,255,255,0.7) !important; border-radius: 8px 0 0 0 !important;
+            font-size: 10px !important; padding: 2px 6px !important;
+        }
+        .waypoint-dot {
+            width: 12px; height: 12px; background: #512BD4;
+            border: 2px solid white; border-radius: 50%;
+            box-shadow: 0 2px 6px rgba(81,43,212,0.5);
+        }
+        /* Shown instead of .waypoint-dot on whichever waypoint is currently
+           highlighted by the route-order sweep — see advanceWaypointHighlight(). */
+        .waypoint-dot.active {
+            width: 20px; height: 20px; background: #FFCC00;
+            border: 3px solid white; border-radius: 50%;
+            box-shadow: 0 0 0 6px rgba(255,204,0,0.35), 0 2px 8px rgba(0,0,0,0.35);
+            animation: waypoint-pulse 1s ease-in-out infinite;
+        }
+        @keyframes waypoint-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+        }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+    var map = L.map('map', { zoomControl:false }).setView([30,0], 3);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom:19,
+        attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    var routeLine     = null;
+    var originMarker  = null;
+    var destMarker    = null;
+    var waypointMarkers = [];
+    var userMarker    = null;
+
+    var WAYPOINT_ICON = L.divIcon({
+        className: '', html: '<div class="waypoint-dot"></div>', iconSize: [12,12], iconAnchor: [6,6]
+    });
+    var WAYPOINT_ICON_ACTIVE = L.divIcon({
+        className: '', html: '<div class="waypoint-dot active"></div>', iconSize: [20,20], iconAnchor: [10,10]
+    });
+
+    // A time-accurate version of this was tried first (highlight a waypoint only
+    // when a radar frame's real timestamp landed within 15 minutes of that
+    // waypoint's ETA) and turned out to look broken in practice: radar frames only
+    // span roughly the past 2 hours through a short nowcast, so on anything longer
+    // than a short local trip only the very first waypoint ever fell inside that
+    // window — every other dot just stayed dark for the entire loop. This sweep
+    // instead advances one waypoint at a time, in route order, on the same clock
+    // tick that steps the radar frame — every waypoint gets its moment regardless of
+    // how far out its real ETA is. It's a rhythm, not a literal time match.
+    //
+    // This index and radarPosition (below) each cycle modulo a different array
+    // length, so left alone they drift out of phase every loop — see the resync
+    // logic in playRadarAnimation for the fix.
+    var waypointHighlightIndex = -1;
+
+    function advanceWaypointHighlight() {
+        if (waypointMarkers.length === 0) return;
+        if (waypointHighlightIndex >= 0 && waypointHighlightIndex < waypointMarkers.length) {
+            waypointMarkers[waypointHighlightIndex].setIcon(WAYPOINT_ICON);
+        }
+        waypointHighlightIndex = (waypointHighlightIndex + 1) % waypointMarkers.length;
+        waypointMarkers[waypointHighlightIndex].setIcon(WAYPOINT_ICON_ACTIVE);
+    }
+
+    // Turns off whichever marker is currently highlighted and rewinds the sweep so
+    // the next advanceWaypointHighlight() call lands on waypoint 0 — see the call
+    // site in playRadarAnimation for why this needs to exist as its own step instead
+    // of just letting advanceWaypointHighlight's own modulo wrap the index around.
+    function resetWaypointHighlight() {
+        if (waypointHighlightIndex >= 0 && waypointHighlightIndex < waypointMarkers.length) {
+            waypointMarkers[waypointHighlightIndex].setIcon(WAYPOINT_ICON);
+        }
+        waypointHighlightIndex = -1;
+    }
+
+    // ── Radar animation state ───────────────────────────────────────────────
+    var radarLayers    = [];   // one Leaflet tileLayer per frame, all pre-added at opacity 0
+    var radarPosition   = 0;
+    var radarTimer      = null;
+    var RADAR_OPACITY      = 0.6;
+    var RADAR_FRAME_DELAY_MS = 500;
+
+    // ── Route polyline + origin/destination pins ───────────────────────────────
+    // points: array of [lat, lon] pairs describing the route geometry.
+    function setRoute(points) {
+        if (routeLine) routeLine.remove();
+        if (originMarker) originMarker.remove();
+        if (destMarker) destMarker.remove();
+
+        if (!points || points.length === 0) return;
+
+        routeLine = L.polyline(points, { color:'#512BD4', weight:5, opacity:0.85 }).addTo(map);
+
+        originMarker = L.circleMarker(points[0], {
+            radius:9, fillColor:'#34C759', color:'white', weight:3, opacity:1, fillOpacity:1
+        }).addTo(map);
+
+        var last = points[points.length - 1];
+        destMarker = L.circleMarker(last, {
+            radius:9, fillColor:'#FF3B30', color:'white', weight:3, opacity:1, fillOpacity:1
+        }).addTo(map);
+
+        map.fitBounds(routeLine.getBounds(), { padding: [40, 40] });
+    }
+
+    // ── Waypoint markers (towns/interval points forecasts are pulled for) ──────
+    // waypoints: array of [lat, lon, popupHtml] triples, in route order — the sweep
+    // above relies on that order to advance origin-to-destination.
+    function setWaypoints(waypoints) {
+        waypointMarkers.forEach(function(m) { m.remove(); });
+        waypointMarkers = [];
+        waypointHighlightIndex = -1;
+
+        (waypoints || []).forEach(function(w) {
+            var marker = L.marker([w[0], w[1]], { icon: WAYPOINT_ICON }).bindPopup(w[2]).addTo(map);
+            waypointMarkers.push(marker);
+        });
+
+        // Radar may already be animating (e.g. replaying state after the WebView
+        // reloads) — pick up the sweep immediately on the new markers rather than
+        // waiting for the next animation tick.
+        if (radarLayers.length > 0) advanceWaypointHighlight();
+    }
+
+    // ── Radar/precip overlay, animated ──────────────────────────────────────
+    // frames: array of {time, url} objects in chronological order (past frames
+    // through RainViewer's short nowcast), from IPrecipitationOverlayService via
+    // RoutePlannerViewModel.MapRadarOverlayReady. This is a rolling ~2hr nowcast,
+    // not valid for a stop hours down the road — see architecture doc §1.
+    //
+    // RainViewer's radar tiles only exist natively up to zoom 7 — requesting a
+    // higher zoom directly from their server returns a placeholder tile that reads
+    // "zoom level not supported" instead of image data. maxNativeZoom tells Leaflet
+    // to stop asking RainViewer past z7 and instead upscale those tiles locally when
+    // the user zooms in further, which is what RainViewer's own reference viewer
+    // does (https://github.com/rainviewer/rainviewer-api-example).
+    //
+    // All frames are pre-added to the map at opacity 0 and toggled visible one at a
+    // time on an interval — same swap-not-refetch approach as RainViewer's example,
+    // so the loop doesn't re-request tiles every cycle once frames are loaded.
+    function setRadarFrames(frames) {
+        clearRadarFrames();
+        if (!frames || frames.length === 0) return;
+
+        frames.forEach(function(f) {
+            var layer = L.tileLayer(f.url, {
+                tileSize: 256,
+                maxNativeZoom: 7,
+                maxZoom: 19,
+                opacity: 0
+            }).addTo(map);
+            radarLayers.push(layer);
+        });
+
+        radarPosition = radarLayers.length - 1;
+        radarLayers[radarPosition].setOpacity(RADAR_OPACITY);
+        advanceWaypointHighlight();
+        playRadarAnimation();
+    }
+
+    function playRadarAnimation() {
+        stopRadarAnimation();
+        if (radarLayers.length < 2) return;
+        radarTimer = setInterval(function() {
+            // The waypoint sweep advances one marker per tick, cycling modulo
+            // waypointMarkers.length, while the radar loop cycles modulo
+            // radarLayers.length — two independently-sized counters that, left to
+            // free-run, only line back up on their own once every
+            // LCM(waypointCount, radarFrameCount) ticks (e.g. 5 waypoints, 13 radar
+            // frames -> every 65 ticks, not 13). Whichever one is about to complete
+            // its own cycle this tick forces BOTH back to their first frame/waypoint
+            // together, so a short trip's sweep (which usually finishes well before
+            // a ~13-frame radar loop comes back around) restarts the radar with it
+            // instead of idling or drifting, and the reverse (radar finishing before
+            // a longer sweep does) works the same way.
+            //
+            // waypointMarkers.length > 1 guard: with 0 or 1 waypoints there's no
+            // real "sweep" to complete (index mod 1 is always 0), so that case must
+            // not be treated as "finishing" every single tick — that would freeze
+            // the radar on its first frame forever.
+            var radarFinishing = (radarPosition + 1) % radarLayers.length === 0;
+            var waypointFinishing = waypointMarkers.length > 1 &&
+                (waypointHighlightIndex + 1) % waypointMarkers.length === 0;
+            var restartBoth = radarFinishing || waypointFinishing;
+
+            radarLayers[radarPosition].setOpacity(0);
+            radarPosition = restartBoth ? 0 : (radarPosition + 1) % radarLayers.length;
+            radarLayers[radarPosition].setOpacity(RADAR_OPACITY);
+
+            if (restartBoth) resetWaypointHighlight();
+            advanceWaypointHighlight();
+        }, RADAR_FRAME_DELAY_MS);
+    }
+
+    function stopRadarAnimation() {
+        if (radarTimer) { clearInterval(radarTimer); radarTimer = null; }
+    }
+
+    function clearRadarFrames() {
+        stopRadarAnimation();
+        radarLayers.forEach(function(l) { l.remove(); });
+        radarLayers = [];
+        radarPosition = 0;
+        waypointMarkers.forEach(function(m) { m.setIcon(WAYPOINT_ICON); });
+        waypointHighlightIndex = -1;
+    }
+
+    // ── Live "you are here" marker ──────────────────────────────────────────
+    // Ported from proximityalarm's updateUserLocation, with one deliberate change:
+    // proximityalarm calls map.setView(ll,15) on the very first fix to recenter on
+    // the user, since it has no "whole route" view to preserve. This app calls
+    // setRoute() on Plan Route, which already fits the map to the entire route —
+    // recentering to z15 on the first GPS fix right after that would immediately
+    // undo that framing and zoom in on just the user's current position. So this
+    // version only ever moves the marker and never touches the map's view/zoom;
+    // the user pans/zooms manually if they want to follow themselves closely.
+    function updateUserLocation(lat, lon) {
+        var ll = [lat, lon];
+        if (!userMarker) {
+            userMarker = L.circleMarker(ll, {
+                radius: 10, fillColor: '#2196F3', color: 'white', weight: 3, opacity: 1, fillOpacity: 1
+            }).addTo(map);
+        } else {
+            userMarker.setLatLng(ll);
+        }
+    }
+
+    function clearUserLocation() {
+        if (userMarker) { userMarker.remove(); userMarker = null; }
+    }
+
+    // Pans/zooms to a picked origin before a route exists to fit — driven by
+    // RoutePlannerViewModel.OriginSelected (search suggestion or "my location").
+    // Zoom 12 is roughly city-level, close enough to see the picked point clearly
+    // without being zoomed in past what's useful before a destination is even
+    // chosen. Once setRoute() runs it takes over framing via fitBounds, so this
+    // only matters for the window between picking an origin and planning the route.
+    function centerMap(lat, lon) {
+        map.setView([lat, lon], 12);
+    }
+
+    // ── Clear All ────────────────────────────────────────────────────────────
+    // Driven by RoutePlannerViewModel.ClearAllCommand/MapCleared. Reuses the
+    // existing per-concern clear functions rather than duplicating their logic —
+    // setRoute([]) already no-ops cleanly on an empty array (removes the route line
+    // and origin/destination pins, skips fitBounds), same for setWaypoints([]).
+    function clearAll() {
+        setRoute([]);
+        setWaypoints([]);
+        clearRadarFrames();
+        clearUserLocation();
+    }
+
+    // ── Waypoint popup refresh (live ETA/forecast recompute) ───────────────────
+    // popups: array of HTML strings, one per waypoint, in the same order as the most
+    // recent setWaypoints() call. Deliberately does NOT touch markers, icons, or the
+    // route line/bounds — RoutePlannerViewModel's throttled progress recompute fires
+    // every couple of minutes while a trip is live, and re-running setRoute/setWaypoints
+    // here would re-fit the map and reset the highlight sweep on every tick, fighting
+    // whatever the user is looking at. This only refreshes what's inside each existing
+    // marker's popup, so an open popup mid-trip shows the corrected ETA/forecast the
+    // next time it's opened (or immediately, if Leaflet has it open already).
+    function updateWaypointPopups(popups) {
+        (popups || []).forEach(function(html, i) {
+            if (waypointMarkers[i]) waypointMarkers[i].setPopupContent(html);
+        });
+    }
+</script>
+</body>
+</html>

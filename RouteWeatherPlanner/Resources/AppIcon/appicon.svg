@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 456 456">
+  <!-- App icon background: sky gradient replacing the old flat MAUI-template
+       purple. Weatherline's icon is meant to read as "weather along a route"
+       at a glance — see appiconfg.svg for the sun/cloud + road foreground
+       that pairs with this. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3E7CB1" />
+      <stop offset="1" stop-color="#1B3A5C" />
+    </linearGradient>
+  </defs>
+  <rect width="456" height="456" rx="80" fill="url(#sky)" />
+</svg>

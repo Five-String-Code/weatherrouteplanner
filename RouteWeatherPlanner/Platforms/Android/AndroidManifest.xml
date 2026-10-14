@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  First hand-authored manifest in this project — until now Platforms/Android had no
+  AndroidManifest.xml at all, so every build used the .NET Android tooling's
+  auto-generated default (which is why Nominatim/OSRM/Open-Meteo/RainViewer HTTP
+  calls have worked fine this whole project without an explicit INTERNET permission
+  line — the default template already grants it). Live location tracking needs
+  permissions that ARE NOT part of that default (location, foreground service,
+  notifications), so this file has to exist now. android:icon/roundIcon reference the
+  same @mipmap/appicon(_round) the MauiIcon MSBuild item in the .csproj generates —
+  see proximityalarm's manifest, which this is modeled on.
+
+  Deliberately narrower than proximityalarm's manifest: VIBRATE and WAKE_LOCK are
+  proximity-alarm-specific (buzzing/waking the device for an alert this app doesn't
+  have), so they're left out here rather than copied reflexively.
+
+  ACCESS_NETWORK_STATE, the AdActivity entry, and the APPLICATION_ID meta-data below
+  are all added for Plugin.AdMob (see README.md item 14) — required exactly as shown
+  in the plugin's own Setup.md, not something this project would otherwise need.
+  APPLICATION_ID's value below is Google's own published test App ID
+  (ca-app-pub-3940256099942544~3347511713 — the same one AdMob's own docs and the
+  plugin's Setup.md use as their example), safe to commit since it's not a per-account
+  secret. Replace it with the real App ID from your AdMob dashboard (Apps > [your app]
+  > App settings > App ID) once you've created the app there — see README.md item 14.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+	<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+	<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+	<uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+	<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+	<uses-permission android:name="android.permission.INTERNET" />
+	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+	<application android:allowBackup="true" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true">
+		<service android:name="RouteWeatherPlanner.Platforms.Android.TrackingService"
+				 android:foregroundServiceType="location"
+				 android:exported="false" />
+
+		<activity android:name="com.google.android.gms.ads.AdActivity"
+				  android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|uiMode|screenSize|smallestScreenSize"
+				  android:theme="@android:style/Theme.Translucent" />
+		<!-- TODO: replace with your real AdMob App ID once created — see comment above. -->
+		<meta-data android:name="com.google.android.gms.ads.APPLICATION_ID"
+				   android:value="ca-app-pub-3940256099942544~3347511713" />
+	</application>
+</manifest>
