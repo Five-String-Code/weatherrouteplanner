@@ -137,6 +137,20 @@
         <Grid Grid.Row="5">
             <WebView x:Name="MapWebView" />
 
+            <!-- Google Play requires a privacy policy link inside the app itself, not
+                 just in the store listing. Small tappable label over the map's
+                 top-right corner; opens the hosted policy in the browser. -->
+            <Label Text="Privacy Policy"
+                   TextDecorations="Underline"
+                   TextColor="#512BD4" FontSize="12"
+                   BackgroundColor="#CCFFFFFF" Padding="8,4"
+                   HorizontalOptions="End" VerticalOptions="Start"
+                   Margin="0,6,6,0">
+                <Label.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnPrivacyPolicyTapped" />
+                </Label.GestureRecognizers>
+            </Label>
+
             <Button Text="View Forecast Along Route"
                     Command="{Binding ViewForecastCommand}"
                     IsVisible="{Binding HasCurrentTrip}"

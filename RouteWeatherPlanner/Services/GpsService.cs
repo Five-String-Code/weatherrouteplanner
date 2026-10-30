@@ -28,12 +28,54 @@ public class GpsService : IGpsService
     public bool IsTracking { get; private set; }
     public Location? LastKnownLocation { get; private set; }
 
+    private const string DisclosureAcceptedKey = "location_disclosure_accepted";
+
+    // Google Play's Prominent Disclosure and Consent requirement: before the system
+    // location permission prompt, show an in-app screen that says what location data is
+    // collected, what it is used for, and who it goes to, and get an explicit
+    // agree/decline. The OS prompt alone does not count. Remembered after the first
+    // "Agree" so it is not shown again.
+    public static async Task<bool> EnsureDisclosureAcceptedAsync()
+    {
+        if (Preferences.Default.Get(DisclosureAcceptedKey, false))
+            return true;
+
+        var page = Application.Current?.Windows.FirstOrDefault()?.Page;
+        if (page is null)
+            return false;
+
+#pragma warning disable CS0618 // DisplayAlert is the long-standing API; newer name is optional
+        var accepted = await MainThread.InvokeOnMainThreadAsync(() => page.DisplayAlert(
+            "Weatherline uses your location",
+            "Weatherline collects your device's precise location (GPS) to show your " +
+            "position on the map, update your estimated arrival times, and get weather " +
+            "forecasts for places ahead of you on your route.\n\n" +
+            "Location is collected only while the app is open or while a trip is being " +
+            "tracked (an ongoing notification is shown), and never when the app is " +
+            "closed. It is not collected in the background.\n\n" +
+            "Nearby coordinates are shared with Open-Meteo to get forecasts. Ads are " +
+            "provided by Google AdMob, which may use your device's advertising ID.\n\n" +
+            "Tap Agree to continue to the Android location permission, or Decline to " +
+            "keep using the app by typing addresses.",
+            "Agree",
+            "Decline"));
+#pragma warning restore CS0618
+
+        if (accepted)
+            Preferences.Default.Set(DisclosureAcceptedKey, true);
+
+        return accepted;
+    }
+
     public async Task<bool> RequestPermissionsAsync()
     {
         var status = await Permissions.CheckStatusAsync<Permissions.LocationWhenInUse>();
 
         if (status != PermissionStatus.Granted)
         {
+            if (!await EnsureDisclosureAcceptedAsync())
+                return false;
+
             status = await Permissions.RequestAsync<Permissions.LocationWhenInUse>();
         }
 
@@ -47,21 +89,10 @@ public class GpsService : IGpsService
             return false;
         }
 
-#if ANDROID
-        // Background tracking requires the separate ACCESS_BACKGROUND_LOCATION permission on API 29+.
-        var bgStatus = await Permissions.CheckStatusAsync<Permissions.LocationAlways>();
-        if (bgStatus != PermissionStatus.Granted)
-        {
-            bgStatus = await Permissions.RequestAsync<Permissions.LocationAlways>();
-            if (bgStatus != PermissionStatus.Granted)
-            {
-                // Foreground-only tracking still works while the app is visible; alert
-                // the caller so the UI can explain the limitation (the live marker and
-                // ETA recompute will stop updating if the user backgrounds the app).
-                LocationError?.Invoke(this, "Background location not granted; live tracking will only update while the app is open.");
-            }
-        }
-#endif
+        // No ACCESS_BACKGROUND_LOCATION request any more (Google Play rejected it).
+        // Tracking continues while the app is backgrounded through the location-type
+        // foreground service TrackingService starts, which only needs the permission
+        // granted above and was started while the app was visible.
 
         return true;
     }

@@ -11,6 +11,17 @@ public partial class RoutePlanningPage : ContentPage
     private readonly RoutePlannerViewModel _vm;
     private bool _mapReady;
 
+    // Same URL entered in Play Console's App content > Privacy policy field. Google
+    // requires the policy to be reachable from inside the app as well.
+    private const string PrivacyPolicyUrl =
+        "https://github.com/Five-String-Code/weatherrouteplanner/blob/main/weather-route-planner-privacy-policy.md";
+
+    private async void OnPrivacyPolicyTapped(object? sender, TappedEventArgs e)
+    {
+        try { await Launcher.Default.OpenAsync(PrivacyPolicyUrl); }
+        catch { /* no browser available; nothing useful to do */ }
+    }
+
     public RoutePlanningPage(RoutePlannerViewModel viewModel)
     {
         InitializeComponent();
@@ -95,6 +106,16 @@ public partial class RoutePlanningPage : ContentPage
     {
         base.OnAppearing();
         if (!_mapReady) await LoadMapAsync();
+
+        // Show the location disclosure on first launch, in the normal flow of using
+        // the app and before any system permission prompt, so it is the first thing a
+        // new user (or a Play reviewer) sees about location. Agreeing then triggers
+        // the system prompt; declining leaves the app usable by typing addresses.
+        if (!Preferences.Default.Get("location_disclosure_accepted", false)
+            && await GpsService.EnsureDisclosureAcceptedAsync())
+        {
+            await Permissions.RequestAsync<Permissions.LocationWhenInUse>();
+        }
     }
 
     private async Task LoadMapAsync()

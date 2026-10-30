@@ -36,7 +36,7 @@
 		     ("Version code 1 has already been used") - every upload to any track
 		     needs a strictly higher integer than all previous ones. Bump this before
 		     each new .aab you build for upload. -->
-		<ApplicationVersion>2</ApplicationVersion>
+		<ApplicationVersion>4</ApplicationVersion>
 
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
 		<!-- 26.0, already well above the 23.0 floor Plugin.AdMob's setup docs call out

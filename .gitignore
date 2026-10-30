@@ -1,14 +1,77 @@
-bin/
-obj/
-*.user
-.vs/
-.vscode/
+# ---- Secrets and signing (never commit) ------------------------------------
+# Real API keys / AdMob IDs live in these; the committed *.Sample.cs files are the
+# templates. The pattern is **/ so it matches at any depth, not just the repo root.
 **/Configuration/ApiKeys.cs
 **/Configuration/AdMobConfig.cs
 *.keystore
 *.jks
-*.zip
+*.pfx
+*.p12
+*.snk
+google-services.json
+*.pem
+.env
+.env.*
+secrets.json
+
+# ---- Build output -----------------------------------------------------------
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+publish/
+artifacts/
 *.aab
 *.apk
+*.ap_
+*.dex
+*.zip
+*.nupkg
+*.snupkg
+
+# ---- Visual Studio / VS Code / Rider ----------------------------------------
+.vs/
+.vscode/
 .idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.rsuser
+*.DotSettings.user
+*.csproj.user
+launchSettings.json.user
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.sln.iml
+
+# ---- .NET / MAUI tooling ----------------------------------------------------
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.binlog
+*.log
+msbuild.*.log
+.dotnet/
+TestResults/
+*.trx
+coverage*.xml
+
+# ---- Android ----------------------------------------------------------------
+.gradle/
+local.properties
+captures/
+*.hprof
+
+# ---- OS junk ----------------------------------------------------------------
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+*.swp
+*~
+
+# ---- Scratch ----------------------------------------------------------------
+crash.txt
+testwrite.tmp
+*.tmp
