@@ -29,8 +29,13 @@ hard way against a real device this round).
 live location tracking landed, since the permissions it requires aren't part of the
 .NET Android tooling's auto-generated default manifest the project relied on before).
 
-Still missing: `Platforms/iOS/` (AppDelegate.cs, Info.plist) and `Properties/` — real
-platform bootstrapping/manifest files that need to come from the template. If you
+`Platforms/iOS/` (AppDelegate.cs, Program.cs, Info.plist, PrivacyInfo.xcprivacy) now
+exists too, from the MAUI template plus the location-permission string and AdMob app ID
+iOS requires. With no Mac to build on, iOS builds run on GitHub's macOS runners via
+`.github/workflows/ios-build.yml` — see the comment at the top of that file for the
+signing secrets it needs to produce a device/TestFlight build.
+
+Still missing: `Properties/` — template files that need to come from the template. If you
 don't already have a `Platforms/` folder from one, generate one on your dev machine:
 
 ```bash
@@ -38,7 +43,7 @@ dotnet workload install maui
 dotnet new maui -n RouteWeatherPlanner
 ```
 
-...and copy `Platforms/iOS/` and `Properties/` from that over — but keep this
+...and copy `Properties/` from that over — but keep this
 scaffold's `Platforms/Android/MainActivity.cs`, `MainApplication.cs`,
 `AndroidManifest.xml`, and `TrackingService.cs` rather than the template's: the
 explicit `Name` on `MainActivity` is what makes `deploy.ps1` able to launch the app by

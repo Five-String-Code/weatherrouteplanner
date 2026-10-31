@@ -1,0 +1,158 @@
+# Builds the iOS app on a GitHub-hosted Mac, since there's no local Mac to build on.
+#
+# Always: compiles for the iOS simulator. No Apple account needed, so this proves the
+# project builds and catches iOS-only compile errors on every push/PR.
+#
+# Only when the signing secrets below are set: also builds a signed Release .ipa
+# for real devices and uploads it as a workflow artifact. If the App Store Connect
+# API key secrets are set too, it sends that .ipa to TestFlight.
+#
+# Repo secrets (Settings > Secrets and variables > Actions):
+#   IOS_DIST_CERT_P12_BASE64      base64 of the Apple Distribution certificate exported as .p12
+#   IOS_DIST_CERT_PASSWORD        the password chosen when exporting that .p12
+#   IOS_PROVISIONING_PROFILE_BASE64  base64 of the App Store provisioning profile (.mobileprovision)
+#                                 for com.fivestringcode.weatherline
+#   APPSTORE_API_KEY_ID           (optional, TestFlight) App Store Connect API key ID
+#   APPSTORE_API_ISSUER_ID        (optional, TestFlight) its issuer ID
+#   APPSTORE_API_PRIVATE_KEY      (optional, TestFlight) contents of the AuthKey_XXXX.p8 file
+#   ADMOB_IOS_APP_ID              (optional) real AdMob iOS app ID; otherwise Google's test ID
+#   ADMOB_IOS_BANNER_AD_UNIT_ID   (optional) real AdMob iOS banner unit; otherwise test ads
+
+name: iOS build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  PROJECT: RouteWeatherPlanner/RouteWeatherPlanner.csproj
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      HAS_SIGNING: ${{ secrets.IOS_DIST_CERT_P12_BASE64 != '' && secrets.IOS_PROVISIONING_PROFILE_BASE64 != '' }}
+      HAS_TESTFLIGHT: ${{ secrets.APPSTORE_API_KEY_ID != '' && secrets.APPSTORE_API_ISSUER_ID != '' && secrets.APPSTORE_API_PRIVATE_KEY != '' }}
+      HAS_ADMOB_APP_ID: ${{ secrets.ADMOB_IOS_APP_ID != '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # The full maui workload (not just maui-ios): the project multi-targets
+      # net10.0-android too, and restore evaluates every target framework.
+      - name: Install MAUI workload
+        run: dotnet workload install maui
+
+      # ApiKeys.cs and AdMobConfig.cs are gitignored (real keys never get committed),
+      # but the code references both, so CI writes its own copies. The Azure Maps key
+      # is only used by the unregistered reference services, so an empty value is fine.
+      - name: Write config files
+        env:
+          ADMOB_IOS_BANNER_AD_UNIT_ID: ${{ secrets.ADMOB_IOS_BANNER_AD_UNIT_ID }}
+        run: |
+          banner="${ADMOB_IOS_BANNER_AD_UNIT_ID:-REPLACE_WITH_YOUR_ADMOB_BANNER_AD_UNIT_ID}"
+          cat > RouteWeatherPlanner/Configuration/ApiKeys.cs <<CS
+          namespace RouteWeatherPlanner.Configuration;
+
+          internal static class ApiKeys
+          {
+              public const string AzureMapsKey = "";
+          }
+          CS
+          cat > RouteWeatherPlanner/Configuration/AdMobConfig.cs <<CS
+          namespace RouteWeatherPlanner.Configuration;
+
+          internal static class AdMobConfig
+          {
+              public const string PlaceholderBannerAdUnitId = "REPLACE_WITH_YOUR_ADMOB_BANNER_AD_UNIT_ID";
+
+              public const string BannerAdUnitId = "$banner";
+          }
+          CS
+
+      - name: Set AdMob iOS app ID
+        env:
+          ADMOB_IOS_APP_ID: ${{ secrets.ADMOB_IOS_APP_ID }}
+        if: env.HAS_ADMOB_APP_ID == 'true'
+        run: /usr/libexec/PlistBuddy -c "Set :GADApplicationIdentifier $ADMOB_IOS_APP_ID" RouteWeatherPlanner/Platforms/iOS/Info.plist
+
+      - name: Build for iOS simulator (unsigned)
+        run: >
+          dotnet build "$PROJECT"
+          -f net10.0-ios
+          -c Debug
+          -p:RuntimeIdentifier=iossimulator-arm64
+
+      # ---- Signed device build: skipped until the signing secrets exist ----------
+
+      - name: Install signing certificate
+        if: env.HAS_SIGNING == 'true'
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
+          p12-password: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+
+      - name: Install provisioning profile
+        if: env.HAS_SIGNING == 'true'
+        env:
+          PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          echo "$PROFILE_BASE64" | base64 --decode > profile.mobileprovision
+          uuid=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< "$(security cms -D -i profile.mobileprovision)")
+          for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$dir"
+            cp profile.mobileprovision "$dir/$uuid.mobileprovision"
+          done
+          echo "PROFILE_UUID=$uuid" >> "$GITHUB_ENV"
+          rm profile.mobileprovision
+
+      - name: Build signed .ipa
+        if: env.HAS_SIGNING == 'true'
+        run: >
+          dotnet publish "$PROJECT"
+          -f net10.0-ios
+          -c Release
+          -p:RuntimeIdentifier=ios-arm64
+          -p:ArchiveOnBuild=true
+          -p:CodesignKey="Apple Distribution"
+          -p:CodesignProvision="$PROFILE_UUID"
+          -o ipa-out
+
+      - name: Locate .ipa
+        if: env.HAS_SIGNING == 'true'
+        run: echo "IPA_PATH=$(ls ipa-out/*.ipa | head -1)" >> "$GITHUB_ENV"
+
+      - name: Upload .ipa artifact
+        if: env.HAS_SIGNING == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Weatherline-ipa
+          path: ipa-out/*.ipa
+          if-no-files-found: error
+
+      # TestFlight only from main (or a manual run), never from a PR branch, so the
+      # same build number isn't uploaded twice. Bump <ApplicationVersion> in the csproj
+      # before each upload: App Store Connect rejects a repeated build number, the same
+      # way Play Console does.
+      - name: Upload to TestFlight
+        if: env.HAS_SIGNING == 'true' && env.HAS_TESTFLIGHT == 'true' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+        uses: apple-actions/upload-testflight-build@v3
+        with:
+          app-path: ${{ env.IPA_PATH }}
+          issuer-id: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+          api-key-id: ${{ secrets.APPSTORE_API_KEY_ID }}
+          api-private-key: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIDeviceFamily</key>
+	<array>
+		<integer>1</integer>
+		<integer>2</integer>
+	</array>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>XSAppIconAssets</key>
+	<string>Assets.xcassets/appicon.appiconset</string>
+
+	<!-- GpsService / RoutePlanningPage only ever request LocationWhenInUse. iOS
+	     terminates the app the moment that request is made if this string is
+	     missing. -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Weatherline uses your location to set your starting point and to follow your progress along the route so forecasts match where you are.</string>
+
+	<!-- Plugin.AdMob: the Google Mobile Ads SDK crashes at launch without an app ID.
+	     This is Google's public iOS *test* app ID. The iOS build workflow swaps in the
+	     real one from the ADMOB_IOS_APP_ID repo secret when it's set — the AdMob
+	     console issues a separate app ID for the iOS app, not the Android one. -->
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3940256099942544~1458002511</string>
+
+	<!-- No encryption beyond HTTPS: lets TestFlight/App Store uploads skip the
+	     export-compliance question on every build. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+</dict>
+</plist>
