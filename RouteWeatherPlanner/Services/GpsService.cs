@@ -50,12 +50,25 @@ public class GpsService : IGpsService
             "Weatherline collects your device's precise location (GPS) to show your " +
             "position on the map, update your estimated arrival times, and get weather " +
             "forecasts for places ahead of you on your route.\n\n" +
+#if IOS
+            // Unlike the Android wording, this has to say location continues in the
+            // background during a trip: on iOS it does (see Platforms/iOS/TrackingService).
+            "Location is collected only while the app is open or while a trip is being " +
+            "tracked, including when Weatherline is in the background during a trip " +
+            "(iOS shows a blue location indicator). It is never collected when no " +
+            "trip is active.\n\n" +
+#else
             "Location is collected only while the app is open or while a trip is being " +
             "tracked (an ongoing notification is shown), and never when the app is " +
             "closed. It is not collected in the background.\n\n" +
+#endif
             "Nearby coordinates are shared with Open-Meteo to get forecasts. Ads are " +
             "provided by Google AdMob, which may use your device's advertising ID.\n\n" +
+#if IOS
+            "Tap Agree to continue to the iOS location permission, or Decline to " +
+#else
             "Tap Agree to continue to the Android location permission, or Decline to " +
+#endif
             "keep using the app by typing addresses.",
             "Agree",
             "Decline"));
@@ -126,7 +139,16 @@ public class GpsService : IGpsService
         Platforms.Android.TrackingService.Start();
 #endif
 
+#if IOS
+        // No poll loop on iOS: it would be suspended along with the app as soon as it
+        // backgrounds. TrackingService's location session keeps delivering fixes
+        // instead (see the comment there).
+        Platforms.iOS.TrackingService.LocationUpdated += OnPlatformLocationUpdated;
+        Platforms.iOS.TrackingService.LocationError += OnPlatformLocationError;
+        Platforms.iOS.TrackingService.Start();
+#else
         _pollingTask = Task.Run(() => PollLoopAsync(_cts.Token));
+#endif
     }
 
     public void StopTracking()
@@ -138,7 +160,24 @@ public class GpsService : IGpsService
 #if ANDROID
         Platforms.Android.TrackingService.Stop();
 #endif
+
+#if IOS
+        Platforms.iOS.TrackingService.Stop();
+        Platforms.iOS.TrackingService.LocationUpdated -= OnPlatformLocationUpdated;
+        Platforms.iOS.TrackingService.LocationError -= OnPlatformLocationError;
+#endif
     }
+
+#if IOS
+    private void OnPlatformLocationUpdated(object? sender, Location location)
+    {
+        LastKnownLocation = location;
+        LocationUpdated?.Invoke(this, location);
+    }
+
+    private void OnPlatformLocationError(object? sender, string message) =>
+        LocationError?.Invoke(this, message);
+#endif
 
     public async Task<Location?> GetCurrentLocationAsync()
     {
