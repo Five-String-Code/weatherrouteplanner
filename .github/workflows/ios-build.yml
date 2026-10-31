@@ -45,7 +45,7 @@ jobs:
 
       # Each .NET iOS SDK pack requires one exact Xcode major.minor, and the newest
       # pack (27.1) needs an Xcode the macos-26 image doesn't have yet. So both are
-      # pinned as a matched pair: workload set 10.111.1 (iOS pack 26.5.10315, MAUI
+      # pinned as a matched pair: workload set 10.0.111.1 (NuGet package version 10.111.1, iOS pack 26.5.10315, MAUI
       # 10.0.20) with Xcode 26.5. To move up later, pick a newer workload set from
       # nuget.org/packages/Microsoft.NET.Workloads.10.0.100 whose
       # Microsoft.NET.Sdk.iOS major.minor matches an Xcode installed on the runner.
@@ -73,7 +73,7 @@ jobs:
       - name: Install MAUI workload
         run: |
           set -o pipefail
-          dotnet workload install maui --version 10.111.1 2>&1 | tee workload.log || {
+          dotnet workload install maui --version 10.0.111.1 2>&1 | tee workload.log || {
             grep -i -E "error|fail|not found|cannot" workload.log | sort -u | head -20 | sed 's/^/::error::/'
             exit 1
           }
