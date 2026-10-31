@@ -54,15 +54,29 @@ jobs:
         with:
           xcode-version: '26.5'
 
-      # 1xx feature band, because the workload set below belongs to that band.
+      # 1xx feature band, because the workload set below belongs to that band. The
+      # runner image already has a newer SDK band installed, and dotnet uses the
+      # newest SDK unless a global.json says otherwise, so CI writes one (kept out of
+      # the repo so local builds aren't pinned).
       - uses: actions/setup-dotnet@v5
+        id: dotnet
         with:
           dotnet-version: 10.0.1xx
+
+      - name: Pin .NET SDK
+        run: |
+          dotnet new globaljson --sdk-version "${{ steps.dotnet.outputs.dotnet-version }}" --force
+          dotnet --version
 
       # The full maui workload (not just maui-ios): the project multi-targets
       # net10.0-android too, and restore evaluates every target framework.
       - name: Install MAUI workload
-        run: dotnet workload install maui --version 10.111.1
+        run: |
+          set -o pipefail
+          dotnet workload install maui --version 10.111.1 2>&1 | tee workload.log || {
+            grep -i -E "error|fail|not found|cannot" workload.log | sort -u | head -20 | sed 's/^/::error::/'
+            exit 1
+          }
 
       # ApiKeys.cs and AdMobConfig.cs are gitignored (real keys never get committed),
       # but the code references both, so CI writes its own copies. The Azure Maps key
