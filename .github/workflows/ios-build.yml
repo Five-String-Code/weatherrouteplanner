@@ -43,16 +43,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Each .NET iOS SDK pack requires one exact Xcode major.minor, and the newest
-      # pack (27.1) needs an Xcode the macos-26 image doesn't have yet. So both are
-      # pinned as a matched pair: workload set 10.0.111.1 (NuGet package version 10.111.1, iOS pack 26.5.10315, MAUI
-      # 10.0.20) with Xcode 26.5. To move up later, pick a newer workload set from
-      # nuget.org/packages/Microsoft.NET.Workloads.10.0.100 whose
-      # Microsoft.NET.Sdk.iOS major.minor matches an Xcode installed on the runner.
+      # Each .NET iOS SDK pack requires one exact Xcode version, and the newest pack
+      # (27.1) needs an Xcode the macos-26 image doesn't have yet. So both are pinned
+      # as a matched pair: workload set 10.0.111.1 (iOS pack 26.5.10315, which
+      # requires Xcode 26.6) with Xcode 26.6. To move up later, pick a newer set from
+      # nuget.org/packages/Microsoft.NET.Workloads.10.0.100 (package version 10.N.M
+      # is workload set 10.0.N.M) and match Xcode to the version its build error asks for.
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '26.5'
+          xcode-version: '26.6'
 
       # 1xx feature band, because the workload set below belongs to that band. The
       # runner image already has a newer SDK band installed, and dotnet uses the
