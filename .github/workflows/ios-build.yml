@@ -43,25 +43,26 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # The .NET iOS workload requires one exact Xcode version, which is often newer
-      # than the runner's default Xcode. Select the newest one installed.
-      - name: List installed Xcode versions
-        run: |
-          echo "::notice::Installed Xcode apps: $(ls -d /Applications/Xcode*.app | xargs -n1 basename | tr '\n' ' ')"
-
-      - name: Select newest Xcode
+      # Each .NET iOS SDK pack requires one exact Xcode major.minor, and the newest
+      # pack (27.1) needs an Xcode the macos-26 image doesn't have yet. So both are
+      # pinned as a matched pair: workload set 10.111.1 (iOS pack 26.5.10315, MAUI
+      # 10.0.20) with Xcode 26.5. To move up later, pick a newer workload set from
+      # nuget.org/packages/Microsoft.NET.Workloads.10.0.100 whose
+      # Microsoft.NET.Sdk.iOS major.minor matches an Xcode installed on the runner.
+      - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest
+          xcode-version: '26.5'
 
+      # 1xx feature band, because the workload set below belongs to that band.
       - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 10.0.1xx
 
       # The full maui workload (not just maui-ios): the project multi-targets
       # net10.0-android too, and restore evaluates every target framework.
       - name: Install MAUI workload
-        run: dotnet workload install maui
+        run: dotnet workload install maui --version 10.111.1
 
       # ApiKeys.cs and AdMobConfig.cs are gitignored (real keys never get committed),
       # but the code references both, so CI writes its own copies. The Azure Maps key
