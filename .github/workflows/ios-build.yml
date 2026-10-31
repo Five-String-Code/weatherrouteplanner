@@ -43,10 +43,16 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Select latest Xcode
+      # The .NET iOS workload requires one exact Xcode version, which is often newer
+      # than the runner's default Xcode. Select the newest one installed.
+      - name: List installed Xcode versions
+        run: |
+          echo "::notice::Installed Xcode apps: $(ls -d /Applications/Xcode*.app | xargs -n1 basename | tr '\n' ' ')"
+
+      - name: Select newest Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: latest
 
       - uses: actions/setup-dotnet@v5
         with:
