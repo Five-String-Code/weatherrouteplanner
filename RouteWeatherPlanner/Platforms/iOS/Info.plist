@@ -35,6 +35,19 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Weatherline uses your location to set your starting point and to follow your progress along the route so forecasts match where you are.</string>
 
+	<!-- Platforms/iOS/TrackingService keeps a trip's location session running while
+	     the app is backgrounded, using the While-In-Use permission above (no "Always"
+	     prompt). Without this mode iOS suspends the app, and tracking with it, seconds
+	     after the user switches away. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
+	<!-- Never requested (the app only asks for When-In-Use), but App Store Connect
+	     flags a build that declares background location without it. -->
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Weatherline uses your location to follow your progress along the route, including while it's in the background during a trip, so forecasts match where you are.</string>
+
 	<!-- Plugin.AdMob: the Google Mobile Ads SDK crashes at launch without an app ID.
 	     This is Google's public iOS *test* app ID. The iOS build workflow swaps in the
 	     real one from the ADMOB_IOS_APP_ID repo secret when it's set — the AdMob
