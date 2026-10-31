@@ -41,14 +41,14 @@ jobs:
       HAS_ADMOB_APP_ID: ${{ secrets.ADMOB_IOS_APP_ID != '' }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Select latest Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
 
@@ -90,12 +90,15 @@ jobs:
         if: env.HAS_ADMOB_APP_ID == 'true'
         run: /usr/libexec/PlistBuddy -c "Set :GADApplicationIdentifier $ADMOB_IOS_APP_ID" RouteWeatherPlanner/Platforms/iOS/Info.plist
 
+      # Build errors are re-emitted as ::error:: annotations so they show on the PR's
+      # checks page without digging through the full log.
       - name: Build for iOS simulator (unsigned)
-        run: >
-          dotnet build "$PROJECT"
-          -f net10.0-ios
-          -c Debug
-          -p:RuntimeIdentifier=iossimulator-arm64
+        run: |
+          set -o pipefail
+          dotnet build "$PROJECT" -f net10.0-ios -c Debug -p:RuntimeIdentifier=iossimulator-arm64 2>&1 | tee build.log || {
+            grep -E "error|Error" build.log | grep -v -E "^\s*0 Error" | sort -u | head -40 | sed 's/^/::error::/'
+            exit 1
+          }
 
       # ---- Signed device build: skipped until the signing secrets exist ----------
 
